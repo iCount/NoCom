@@ -1,0 +1,39 @@
+<div class="container pt-1">
+  <table class="table table-bordered table-striped table-sm">
+    <thead class="thead-dark">
+    <tr class="text-sm-center">
+      <th scope="col">Username</th>
+      <th scope="col">Server</th>
+      <th scope="col">Dimension</th>
+      <th scope="col">Status</th>
+      <th scope="col">Last Update</th>
+      <th scope="col">Queue</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr *ngFor="let status of statuses" class="text-sm-center">
+      <th scope="row">
+        <span class="badge badge-pill"></span>
+        <span>{{status.playerUsername}}</span>
+      </th>
+      <td><span>{{status.server}}</span></td>
+      <td><span>{{getDimensionName(status.dimension)}}</span></td>
+      <td><span class="{{getStatusColor(status)}}">{{status.state}}</span></td>
+      <td><span>{{getTimeUpdatedPretty(status.updatedAt)}}</span></td>
+      <td><span>{{status.data}}</span></td>
+    </tr>
+    </tbody>
+  </table>
+</div>
+
+<plotly-plot updateOnlyWithRevision="true"
+             updateOnLayoutChange="false"
+             divId="history"
+             useResizeHandler="true"
+             [revision]="revision"
+             [data]="data"
+             [layout]="layout"
+             [config]="config"
+             (initialized)="onPlotInit()"
+             (relayouting)="onRelayout($event)">
+</plotly-plot>
