@@ -1,0 +1,159 @@
+plugins {
+  id 'java'
+  alias libs.plugins.jooqgradle
+  alias libs.plugins.gitgradle
+}
+
+final git = versionDetails()
+
+group 'space.nerdsin.plugins'
+version "${git.lastTag.substring(1)}.r${git.commitDistance}"
+archivesBaseName = "$pluginName"
+
+final isCiBuilding = System.getenv().get('CI') == 'true'
+
+java {
+  toolchain {
+    languageVersion = JavaLanguageVersion.of(17)
+  }
+}
+
+configurations {
+  compileJar {}
+
+  compileClasspath.extendsFrom compileJar
+  runtimeClasspath.extendsFrom compileJar
+}
+
+jooq {
+  version = libs.versions.jooq
+
+  configurations {
+    main {
+      generationTool {
+        logging = org.jooq.meta.jaxb.Logging.WARN
+        jdbc {
+          driver = 'org.h2.Driver'
+          url = 'jdbc:h2:mem:'
+        }
+        generator {
+          name = 'org.jooq.codegen.DefaultGenerator'
+          strategy {
+            name = 'org.jooq.codegen.DefaultGeneratorStrategy'
+          }
+          //noinspection GroovyAssignabilityCheck
+          database {
+            name = 'org.jooq.meta.extensions.ddl.DDLDatabase'
+            properties {
+              //noinspection GroovyAssignabilityCheck
+              property {
+                key = 'scripts'
+                value = 'src/main/resources/db/h2/*'
+              }
+              //noinspection GroovyAssignabilityCheck
+              property {
+                key = 'sort'
+                value = 'semantic'
+              }
+            }
+
+            inputSchema = 'PUBLIC'
+            outputSchemaToDefault = true
+          }
+          generate {}
+          target {
+            packageName = 'space.nerdsin.plugins.codegen'
+          }
+        }
+      }
+    }
+  }
+}
+
+dependencies {
+  implementation libs.paperapi
+
+  compileOnly libs.lombok
+  annotationProcessor libs.lombok
+
+  compileJar libs.h2
+
+  compileJar libs.jooq
+  jooqGenerator libs.bundles.jooqgen
+
+  compileJar libs.flyway
+
+  compileJar libs.guice
+  compileJar libs.reflections
+}
+
+jar {
+  archiveBaseName = "$archivesBaseName-SLIM"
+
+  //noinspection GroovyAssignabilityCheck
+  manifest {
+    attributes("Class-Path": configurations.compileJar.collect { "libs/${it.getName()}" }.join(' '))
+  }
+
+//  finalizedBy task("copyLibs", type: Copy) {
+//    from configurations.compileJar
+//    into tasks.jar.destinationDirectory.dir("libs")
+//  }
+
+  finalizedBy task("tarLibs", type: Tar) {
+    archiveBaseName = "$archivesBaseName-libs"
+    archiveExtension = "tar.gz"
+    destinationDirectory = tasks.jar.destinationDirectory
+    compression = org.gradle.api.tasks.bundling.Compression.GZIP
+
+    from configurations.compileJar
+  }
+}
+
+task fatJar(type: Jar) {
+  archiveBaseName = "$archivesBaseName-FAT"
+
+  from {
+    duplicatesStrategy = DuplicatesStrategy.WARN
+    configurations.compileJar.collect { it.isDirectory() ? it : zipTree(it) }
+  }
+
+  with jar
+}
+
+artifacts {
+  archives fatJar
+}
+
+processResources {
+  filesMatching('**/plugin.yml') {
+    //noinspection UnnecessaryQualifiedReference
+    filter(org.apache.tools.ant.filters.ReplaceTokens, tokens: [
+        'name'      : archivesBaseName,
+        'class'     : pluginClass,
+        'version'   : git.lastTag.substring(1),
+        'apiversion': pluginApiVersion
+    ]);
+  }
+
+  filesMatching('**/config.yml') {
+    //noinspection UnnecessaryQualifiedReference
+    filter(org.apache.tools.ant.filters.ReplaceTokens, tokens: [
+        'database.filename': databaseFileName
+    ]);
+  }
+}
+
+task createGitHubActionsVars() {
+  onlyIf { isCiBuilding }
+  doFirst {
+    println "::set-output name=slimjar::${jar.archiveFileName.get()}"
+    println "::set-output name=libstar::${tasks.tarLibs.archiveFileName.get()}"
+    println "::set-output name=fatjar::${fatJar.archiveFileName.get()}"
+    println "::set-output name=version::${project.version}"
+  }
+}
+
+build {
+  finalizedBy createGitHubActionsVars
+}
