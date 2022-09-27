@@ -1,0 +1,3 @@
+mc.player.connection.sendPacket(new CPacketPlayerDigging(CPacketPlayerDigging.Action.STOP_DESTROY_BLOCK, blockPosToCheck, EnumFacing.DOWN));
+
+Исходный код ноукома
